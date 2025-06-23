@@ -166,6 +166,7 @@ const lmStudioSchema = baseProviderSettingsSchema.extend({
 
 const geminiSchema = apiModelIdProviderModelSchema.extend({
 	geminiApiKey: z.string().optional(),
+	geminiModelId: z.string().optional(),
 	googleGeminiBaseUrl: z.string().optional(),
 })
 
@@ -316,6 +317,7 @@ export const MODEL_ID_KEYS: Partial<keyof ProviderSettings>[] = [
 	"openRouterModelId",
 	"openAiModelId",
 	"ollamaModelId",
+	"geminiModelId",
 	"lmStudioModelId",
 	"lmStudioDraftModelId",
 	"unboundModelId",

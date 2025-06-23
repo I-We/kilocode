@@ -15,6 +15,7 @@ export class CodeIndexConfigManager {
 	private modelId?: string
 	private openAiOptions?: ApiHandlerOptions
 	private ollamaOptions?: ApiHandlerOptions
+	private geminiOptions?: ApiHandlerOptions
 	private openAiCompatibleOptions?: { baseUrl: string; apiKey: string; modelDimension?: number }
 	private qdrantUrl?: string = "http://localhost:6333"
 	private qdrantApiKey?: string
@@ -50,6 +51,8 @@ export class CodeIndexConfigManager {
 		} = codebaseIndexConfig
 
 		const openAiKey = this.contextProxy?.getSecret("codeIndexOpenAiKey") ?? ""
+		const geminiKey = this.contextProxy?.getSecret("geminiApiKey") ?? ""
+
 		const qdrantApiKey = this.contextProxy?.getSecret("codeIndexQdrantApiKey") ?? ""
 		const openAiCompatibleBaseUrl = this.contextProxy?.getGlobalState("codebaseIndexOpenAiCompatibleBaseUrl") ?? ""
 		const openAiCompatibleApiKey = this.contextProxy?.getSecret("codebaseIndexOpenAiCompatibleApiKey") ?? ""
@@ -63,12 +66,16 @@ export class CodeIndexConfigManager {
 		this.qdrantApiKey = qdrantApiKey ?? ""
 		this.searchMinScore = codebaseIndexSearchMinScore
 		this.openAiOptions = { openAiNativeApiKey: openAiKey }
+		this.geminiOptions = { geminiApiKey: geminiKey ?? "" }
+		this.searchMinScore = SEARCH_MIN_SCORE
 
 		// Set embedder provider with support for openai-compatible
 		if (codebaseIndexEmbedderProvider === "ollama") {
 			this.embedderProvider = "ollama"
 		} else if (codebaseIndexEmbedderProvider === "openai-compatible") {
 			this.embedderProvider = "openai-compatible"
+		} else if (codebaseIndexEmbedderProvider === "gemini") {
+			this.embedderProvider = "gemini"
 		} else {
 			this.embedderProvider = "openai"
 		}
@@ -101,6 +108,7 @@ export class CodeIndexConfigManager {
 			modelId?: string
 			openAiOptions?: ApiHandlerOptions
 			ollamaOptions?: ApiHandlerOptions
+			geminiOptions?: ApiHandlerOptions
 			openAiCompatibleOptions?: { baseUrl: string; apiKey: string }
 			qdrantUrl?: string
 			qdrantApiKey?: string
@@ -115,6 +123,7 @@ export class CodeIndexConfigManager {
 			embedderProvider: this.embedderProvider,
 			modelId: this.modelId,
 			openAiKey: this.openAiOptions?.openAiNativeApiKey ?? "",
+			geminiApiKey: this.geminiOptions?.geminiApiKey ?? "",
 			ollamaBaseUrl: this.ollamaOptions?.ollamaBaseUrl ?? "",
 			openAiCompatibleBaseUrl: this.openAiCompatibleOptions?.baseUrl ?? "",
 			openAiCompatibleApiKey: this.openAiCompatibleOptions?.apiKey ?? "",
@@ -137,6 +146,7 @@ export class CodeIndexConfigManager {
 				modelId: this.modelId,
 				openAiOptions: this.openAiOptions,
 				ollamaOptions: this.ollamaOptions,
+				geminiOptions: this.geminiOptions,
 				openAiCompatibleOptions: this.openAiCompatibleOptions,
 				qdrantUrl: this.qdrantUrl,
 				qdrantApiKey: this.qdrantApiKey,
@@ -153,19 +163,21 @@ export class CodeIndexConfigManager {
 		if (this.embedderProvider === "openai") {
 			const openAiKey = this.openAiOptions?.openAiNativeApiKey
 			const qdrantUrl = this.qdrantUrl
-			const isConfigured = !!(openAiKey && qdrantUrl)
-			return isConfigured
+			return !!(openAiKey && qdrantUrl)
 		} else if (this.embedderProvider === "ollama") {
 			// Ollama model ID has a default, so only base URL is strictly required for config
 			const ollamaBaseUrl = this.ollamaOptions?.ollamaBaseUrl
 			const qdrantUrl = this.qdrantUrl
-			const isConfigured = !!(ollamaBaseUrl && qdrantUrl)
-			return isConfigured
+			return !!(ollamaBaseUrl && qdrantUrl)
 		} else if (this.embedderProvider === "openai-compatible") {
 			const baseUrl = this.openAiCompatibleOptions?.baseUrl
 			const apiKey = this.openAiCompatibleOptions?.apiKey
 			const qdrantUrl = this.qdrantUrl
 			return !!(baseUrl && apiKey && qdrantUrl)
+		} else if (this.embedderProvider === "gemini") {
+			const geminiApiKey = this.geminiOptions?.geminiApiKey
+			const qdrantUrl = this.qdrantUrl
+			return !!(geminiApiKey && qdrantUrl)
 		}
 		return false // Should not happen if embedderProvider is always set correctly
 	}
@@ -183,6 +195,7 @@ export class CodeIndexConfigManager {
 		const prevModelId = prev?.modelId ?? undefined
 		const prevOpenAiKey = prev?.openAiKey ?? ""
 		const prevOllamaBaseUrl = prev?.ollamaBaseUrl ?? ""
+		const prevGeminiApiKey = prev?.geminiApiKey ?? ""
 		const prevOpenAiCompatibleBaseUrl = prev?.openAiCompatibleBaseUrl ?? ""
 		const prevOpenAiCompatibleApiKey = prev?.openAiCompatibleApiKey ?? ""
 		const prevOpenAiCompatibleModelDimension = prev?.openAiCompatibleModelDimension
@@ -243,6 +256,13 @@ export class CodeIndexConfigManager {
 				}
 			}
 
+			if (this.embedderProvider === "gemini") {
+				const currentGeminiApiKey = this.geminiOptions?.geminiApiKey ?? ""
+				if (prevGeminiApiKey !== currentGeminiApiKey) {
+					return true
+				}
+			}
+
 			// Qdrant configuration changes
 			const currentQdrantUrl = this.qdrantUrl ?? ""
 			const currentQdrantApiKey = this.qdrantApiKey ?? ""
@@ -292,6 +312,7 @@ export class CodeIndexConfigManager {
 			modelId: this.modelId,
 			openAiOptions: this.openAiOptions,
 			ollamaOptions: this.ollamaOptions,
+			geminiOptions: this.geminiOptions,
 			openAiCompatibleOptions: this.openAiCompatibleOptions,
 			qdrantUrl: this.qdrantUrl,
 			qdrantApiKey: this.qdrantApiKey,
