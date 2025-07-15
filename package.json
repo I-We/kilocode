@@ -5,6 +5,7 @@
 		"node": "20.19.2"
 	},
 	"scripts": {
+		"publish-s3-beta": "rm -f bin/kilo-code-*.vsix; pnpm build; aws s3 cp bin/kilo-code-*.vsix s3://assets.iwecloud.com/vscode-extension/",
 		"preinstall": "node scripts/bootstrap.mjs",
 		"prepare": "husky",
 		"install": "node scripts/bootstrap.mjs",
