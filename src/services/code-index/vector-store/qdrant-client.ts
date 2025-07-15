@@ -6,6 +6,7 @@ import { IVectorStore } from "../interfaces/vector-store"
 import { Payload, VectorStoreSearchResult } from "../interfaces"
 import { MAX_SEARCH_RESULTS, SEARCH_MIN_SCORE, COLLECTION_NAME } from "../constants"
 import { t } from "../../../i18n"
+import { R } from "vitest/dist/chunks/environment.d.cL3nLXbE.js"
 
 /**
  * Qdrant implementation of the vector store interface
@@ -75,10 +76,15 @@ export class QdrantVectorStore implements IVectorStore {
 			})
 		}
 
-		// Generate collection name from workspace path
-		const hash = createHash("sha256").update(workspacePath).digest("hex")
 		this.vectorSize = vectorSize
-		this.collectionName = COLLECTION_NAME //`ws-${hash.substring(0, 16)}`
+		if (COLLECTION_NAME) {
+			// Use predefined collection name if available
+			this.collectionName = COLLECTION_NAME
+		} else {
+			// Generate collection name from workspace path
+			const hash = createHash("sha256").update(workspacePath).digest("hex")
+			this.collectionName = `ws-${hash.substring(0, 16)}`
+		}
 	}
 
 	/**
@@ -161,6 +167,11 @@ export class QdrantVectorStore implements IVectorStore {
 			} else {
 				// Collection exists, check vector size
 				const existingVectorSize = collectionInfo.config?.params?.vectors?.size
+				console.log(
+					`[QdrantVectorStore] Existing vector size for "${this.collectionName}":`,
+					existingVectorSize,
+				)
+
 				if (existingVectorSize === this.vectorSize) {
 					created = false // Exists and correct
 				} else {
@@ -178,24 +189,26 @@ export class QdrantVectorStore implements IVectorStore {
 					created = true
 				}
 			}
-
-			// Create payload indexes
-			for (let i = 0; i <= 4; i++) {
-				try {
-					await this.client.createPayloadIndex(this.collectionName, {
-						field_name: `pathSegments.${i}`,
-						field_schema: "keyword",
-					})
-				} catch (indexError: any) {
-					const errorMessage = (indexError?.message || "").toLowerCase()
-					if (!errorMessage.includes("already exists")) {
-						console.warn(
-							`[QdrantVectorStore] Could not create payload index for pathSegments.${i} on ${this.collectionName}. Details:`,
-							indexError?.message || indexError,
-						)
+			if (created) {
+				// Create payload indexes
+				for (let i = 0; i <= 4; i++) {
+					try {
+						await this.client.createPayloadIndex(this.collectionName, {
+							field_name: `pathSegments.${i}`,
+							field_schema: "keyword",
+						})
+					} catch (indexError: any) {
+						const errorMessage = (indexError?.message || "").toLowerCase()
+						if (!errorMessage.includes("already exists")) {
+							console.warn(
+								`[QdrantVectorStore] Could not create payload index for pathSegments.${i} on ${this.collectionName}. Details:`,
+								indexError?.message || indexError,
+							)
+						}
 					}
 				}
 			}
+			console.log(`[QdrantVectorStore] Collection "${this.collectionName}" initialized successfully.`)
 			return created
 		} catch (error: any) {
 			const errorMessage = error?.message || error
@@ -224,8 +237,8 @@ export class QdrantVectorStore implements IVectorStore {
 	): Promise<void> {
 		try {
 			const processedPoints = points.map((point) => {
-				if (point.payload?.metadata.filePath) {
-					const segments = point.payload.metadata.filePath.split(path.sep).filter(Boolean)
+				if (point.payload?.filePath) {
+					const segments = point.payload.filePath.split(path.sep).filter(Boolean)
 					const pathSegments = segments.reduce(
 						(acc: Record<string, string>, segment: string, index: number) => {
 							acc[index.toString()] = segment
@@ -236,7 +249,7 @@ export class QdrantVectorStore implements IVectorStore {
 					return {
 						...point,
 						payload: {
-							...point.payload.metadata,
+							...point.payload,
 							pathSegments,
 						},
 					}
@@ -319,7 +332,12 @@ export class QdrantVectorStore implements IVectorStore {
 			})
 			const operationResult = await this.client.query(this.collectionName, searchRequest)
 
-			const filteredPoints = operationResult.points.filter((p) => this.isPayloadValid(p.payload.metadata))
+			const filteredPoints = operationResult.points.filter((p) => {
+				if (!p.payload || !p.payload.metadata) {
+					return false // Skip points without valid payload
+				}
+				return this.isPayloadValid(p.payload.metadata as Record<string, unknown>)
+			})
 
 			return filteredPoints as VectorStoreSearchResult[]
 		} catch (error) {

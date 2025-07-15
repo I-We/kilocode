@@ -113,60 +113,65 @@ export class CodeIndexOrchestrator {
 
 			if (collectionCreated) {
 				await this.cacheManager.clearCacheFile()
-			}
 
-			this.stateManager.setSystemState("Indexing", "Services ready. Starting workspace scan...")
+				this.stateManager.setSystemState("Indexing", "Services ready. Starting workspace scan...")
 
-			let cumulativeBlocksIndexed = 0
-			let cumulativeBlocksFoundSoFar = 0
-			let batchErrors: Error[] = []
+				let cumulativeBlocksIndexed = 0
+				let cumulativeBlocksFoundSoFar = 0
+				let batchErrors: Error[] = []
 
-			const handleFileParsed = (fileBlockCount: number) => {
-				cumulativeBlocksFoundSoFar += fileBlockCount
-				this.stateManager.reportBlockIndexingProgress(cumulativeBlocksIndexed, cumulativeBlocksFoundSoFar)
-			}
-
-			const handleBlocksIndexed = (indexedCount: number) => {
-				cumulativeBlocksIndexed += indexedCount
-				this.stateManager.reportBlockIndexingProgress(cumulativeBlocksIndexed, cumulativeBlocksFoundSoFar)
-			}
-
-			const result = await this.scanner.scanDirectory(
-				this.workspacePath,
-				(batchError: Error) => {
-					console.error(
-						`[CodeIndexOrchestrator] Error during initial scan batch: ${batchError.message}`,
-						batchError,
-					)
-					batchErrors.push(batchError)
-				},
-				handleBlocksIndexed,
-				handleFileParsed,
-			)
-
-			if (!result) {
-				throw new Error("Scan failed, is scanner initialized?")
-			}
-
-			const { stats } = result
-
-			// Check if any blocks were actually indexed successfully
-			// If no blocks were indexed but blocks were found, it means all batches failed
-			if (cumulativeBlocksIndexed === 0 && cumulativeBlocksFoundSoFar > 0) {
-				if (batchErrors.length > 0) {
-					// Use the first batch error as it's likely representative of the main issue
-					const firstError = batchErrors[0]
-					throw new Error(`Indexing failed: ${firstError.message}`)
-				} else {
-					throw new Error(
-						"Indexing failed: No code blocks were successfully indexed. This usually indicates an embedder configuration issue.",
-					)
+				const handleFileParsed = (fileBlockCount: number) => {
+					cumulativeBlocksFoundSoFar += fileBlockCount
+					this.stateManager.reportBlockIndexingProgress(cumulativeBlocksIndexed, cumulativeBlocksFoundSoFar)
 				}
+
+				const handleBlocksIndexed = (indexedCount: number) => {
+					cumulativeBlocksIndexed += indexedCount
+					this.stateManager.reportBlockIndexingProgress(cumulativeBlocksIndexed, cumulativeBlocksFoundSoFar)
+				}
+
+				console.log("[CodeIndexOrchestrator] Starting initial directory scan...")
+
+				const result = await this.scanner.scanDirectory(
+					this.workspacePath,
+					(batchError: Error) => {
+						console.error(
+							`[CodeIndexOrchestrator] Error during initial scan batch: ${batchError.message}`,
+							batchError,
+						)
+						batchErrors.push(batchError)
+					},
+					handleBlocksIndexed,
+					handleFileParsed,
+				)
+
+				if (!result) {
+					throw new Error("Scan failed, is scanner initialized?")
+				}
+
+				const { stats } = result
+
+				// Check if any blocks were actually indexed successfully
+				// If no blocks were indexed but blocks were found, it means all batches failed
+				if (cumulativeBlocksIndexed === 0 && cumulativeBlocksFoundSoFar > 0) {
+					if (batchErrors.length > 0) {
+						// Use the first batch error as it's likely representative of the main issue
+						const firstError = batchErrors[0]
+						throw new Error(`Indexing failed: ${firstError.message}`)
+					} else {
+						throw new Error(
+							"Indexing failed: No code blocks were successfully indexed. This usually indicates an embedder configuration issue.",
+						)
+					}
+				}
+
+				await this._startWatcher()
+
+				this.stateManager.setSystemState("Indexed", "File watcher started.")
+			} else {
+				// Collection already exists and is correct
+				this.stateManager.setSystemState("Indexed", "File watcher started.")
 			}
-
-			await this._startWatcher()
-
-			this.stateManager.setSystemState("Indexed", "File watcher started.")
 		} catch (error: any) {
 			console.error("[CodeIndexOrchestrator] Error during indexing:", error)
 			try {
